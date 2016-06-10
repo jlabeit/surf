@@ -3,6 +3,7 @@
 
 #include "sdsl/suffix_trees.hpp"
 #include "sdsl/k2_treap.hpp"
+#include "sdsl/sd_vector.hpp"
 #include "surf/df_sada.hpp"
 #include "surf/rank_functions.hpp"
 #include "surf/idx_d.hpp"
@@ -398,6 +399,45 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
             }
         }
         P_buf.close();
+    }
+    // Compute size of greedy matching of dup with doc array.
+    {
+	// Load everything from cache.
+        int_vector<> darray,dup;
+        load_from_cache(darray, surf::KEY_DARRAY, cc);
+        load_from_cache(dup, surf::KEY_DUP, cc);
+        t_h hrrr;
+        load_from_cache(hrrr, surf::KEY_H, cc, true);
+        t_h_select h_select;
+        load_from_cache(h_select, surf::KEY_H_SELECT, cc, true);
+        h_select.set_vector(&hrrr);
+
+	// Iterate through all nodes.
+	uint64_t start = 0;
+	uint64_t end;
+	uint64_t sa_pos = 0;
+	bit_vector bv(darray.size() * 32, 0);
+	// Note that the first interval are all document ids in ascending order!
+	for (uint64_t i = 1; i < darray.size(); ++i) {
+		end = h_select(i)+1-i;
+		// Add all values to hash set.
+		set<uint64_t> dup_set(dup.begin()+start, dup.begin()+end);
+		while (!dup_set.empty()) {
+			// Attempt to remove doc from set.
+			if (dup_set.erase(darray[sa_pos % darray.size()]))
+				bv[sa_pos] = 1;
+			sa_pos++;
+			if (sa_pos % darray.size() == 0)
+				cout << 100*(double) i/(double)darray.size() << endl;
+		}
+		start = end;
+	}
+	sd_vector<> dup_enc_vec(bv);
+	cout << "Greedy approach: " << sa_pos << "/" << darray.size() << 
+		" = " << (double)sa_pos / (double)darray.size() << endl;
+	cout << "Greedy approach: " << sa_pos << "/" << dup.size() << 
+		" = " << (double)sa_pos / (double)dup.size() << endl;
+	cout << "Bits per dup: " << 8.0 * (double)size_in_bytes(dup_enc_vec) / dup.size() << endl;
     }
     cout<<"...RMQ_C"<<endl;
     if (!cache_file_exists<t_rmq>(surf::KEY_RMQC,cc))
