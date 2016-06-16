@@ -341,8 +341,9 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
     }
 // P corresponds to up-pointers
     cout<<"...P"<<endl;
-    if (!cache_file_exists(surf::KEY_P, cc))
-    {
+    vector<uint64_t> subtree_size;
+    //if (!cache_file_exists(surf::KEY_P, cc))
+    { // Force rebuild.
         uint64_t max_depth = 0;
         load_from_cache(max_depth, surf::KEY_MAXCSTDEPTH, cc);
 
@@ -352,6 +353,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
         if ( dup.size() < 20 ){
             cout << dup << endl;
         }
+	subtree_size.resize(dup.size());
 
         std::string P_file = cache_file_name(surf::KEY_P, cc);
         
@@ -383,8 +385,10 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
                     depth = cst.depth(v);
                     range_type r = map_node_to_dup(v);
                     if ( !empty(r) ){
+			uint64_t st_size = cst.size(v);
                         for(size_t i=r.first; i<=r.second; ++i){
                             depths[dup[i]].push(depth);
+			    subtree_size[i] = st_size;
                         }
                     }
                 } else { // node visited the second time 
@@ -400,7 +404,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
         }
         P_buf.close();
     }
-    // Compute size of greedy matching of dup with doc array.
+    // Compute statistics about dup and doc array.
     {
 	// Load everything from cache.
         int_vector<> darray,dup;
@@ -415,30 +419,66 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 	// Iterate through all nodes.
 	uint64_t start = 0;
 	uint64_t end;
-	uint64_t sa_pos = 0;
-	//bit_vector bv(darray.size() * 32, 0);
+	map<uint64_t, uint64_t> set_sizes;
+	map<uint64_t, uint64_t> subtree_sizes;
+	uint64_t optimal = 0;
+	uint64_t subtreeoffset = 0;
+	uint64_t subtreebv = 0;
 	// Note that the first interval are all document ids in ascending order!
 	for (uint64_t i = 1; i < darray.size(); ++i) {
 		end = h_select(i)+1-i;
-		// Add all values to hash set.
-		set<uint64_t> dup_set(dup.begin()+start, dup.begin()+end);
-		while (!dup_set.empty()) {
-			// Attempt to remove doc from set.
-			dup_set.erase(darray[sa_pos % darray.size()]);
-			//if (dup_set.erase(darray[sa_pos % darray.size()]))
-				//bv[sa_pos] = 1;
-			sa_pos++;
-			if (sa_pos % darray.size() == 0)
-				cout << 100*(double) i/(double)darray.size() << endl;
+		if (start < end) { // Dup lens
+			uint64_t set_size = end-start;
+			if (set_sizes.count(set_size) == 0)
+				set_sizes[set_size] = 1;
+			else
+				set_sizes[set_size]++;
+		}
+		if (start < end) { // Subtree size.
+			if (subtree_sizes.count(subtree_size[start]) == 0)	
+				subtree_sizes[subtree_size[start]] = 1;
+			else
+				subtree_sizes[subtree_size[start]]++;
+		}
+		if (start < end) { // Size calculations.
+			uint64_t _original, _subtreeoffset, _subtreebv;
+			_original = dup.width() * (end-start);
+			_subtreeoffset = log(subtree_size[start]) * (end-start);
+			_subtreebv = subtree_size[start];
+
+			subtreeoffset += _subtreeoffset;
+			subtreebv += _subtreebv;
+			optimal += std::min(_original, std::min(_subtreeoffset, _subtreebv));
 		}
 		start = end;
 	}
-	//sd_vector<> dup_enc_vec(bv);
-	cout << "Greedy approach: " << sa_pos << "/" << darray.size() << 
-		" = " << (double)sa_pos / (double)darray.size() << endl;
-	cout << "Greedy approach: " << sa_pos << "/" << dup.size() << 
-		" = " << (double)sa_pos / (double)dup.size() << endl;
-	//cout << "Bits per dup: " << 8.0 * (double)size_in_bytes(dup_enc_vec) / dup.size() << endl;
+	
+	{ // Output dup lens.
+		cout << "dup size, counts" << endl;
+		for (uint64_t i = 0; !set_sizes.empty(); ++i) {
+			if (set_sizes.count(i) == 0)
+				cout << i << ", 0" << endl;
+			else {
+				cout << i << ", " << set_sizes[i] << endl;
+				set_sizes.erase(i);
+			}
+		}
+	}
+	{ // Output subtree sizes.
+		cout << "subtree size, counts" << endl;
+		for (uint64_t i = 0; !subtree_sizes.empty(); ++i) {
+			if (subtree_sizes.count(i) == 0)
+				cout << i << ", 0" << endl;
+			else {
+				cout << i << ", " << subtree_sizes[i] << endl;
+				subtree_sizes.erase(i);
+			}
+		}
+	}
+	cout << "Size original: " << dup.bit_size() / (double)dup.size() << " bpi"<< endl;
+	cout << "Size subtree offset: " << subtreeoffset / (double)dup.size() << " bpi"<< endl;
+	cout << "Size subtree bv: " << subtreebv / (double)dup.size() << " bpi"<< endl;
+	cout << "Size optimal: " << optimal / (double)dup.size() << " bpi"<< endl;
     }
     cout<<"...RMQ_C"<<endl;
     if (!cache_file_exists<t_rmq>(surf::KEY_RMQC,cc))
