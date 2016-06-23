@@ -453,7 +453,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 		start = end;
 	}
 	
-	{ // Output dup lens.
+	if (false) { // Output dup lens.
 		cout << "dup size, counts" << endl;
 		for (uint64_t i = 0; !set_sizes.empty(); ++i) {
 			if (set_sizes.count(i) == 0)
