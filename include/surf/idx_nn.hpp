@@ -13,6 +13,8 @@
 #include <queue>
 #include <set>
 
+#include "surf/jl_encoder.hpp"
+
 namespace surf{
 
 using range_type = sdsl::range_type;
@@ -409,6 +411,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
         t_h_select h_select;
         load_from_cache(h_select, surf::KEY_H_SELECT, cc, true);
         h_select.set_vector(&hrrr);
+	jl_encoder encoder;
 
 	// Iterate through all nodes.
 	uint64_t start = 0;
@@ -424,16 +427,20 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 			// Find greedy all dups in darray starting from i+1.
 			set<uint64_t> dup_set(dup.begin() + start, dup.begin() + end);	
 			uint64_t sa_pos = i;
+			vector<uint64_t> cur_offsets;
 			while (!dup_set.empty()) {
 				if (dup_set.count(darray[sa_pos]) == 1) {
 					dup_set.erase(darray[sa_pos]);
 					// Store offset.
 					sa_offset.push_back(sa_pos-i);
+					cur_offsets.push_back(sa_pos-i);
 				}	
 				++sa_pos;
 				if (sa_pos >= darray.size())
 					cout << "ERROR: sa_pos is out of bounds." << endl;
 			}
+			// Encode cur_offset.
+			encoder.add(cur_offsets);
 		}
 		start = end;
 	}
@@ -441,7 +448,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 	uint64_t sum_sa_offset = 0.0;
 	for (const auto& val : sa_offset) sum_sa_offset += val;
 	cout << "Avg offset: " << (double)sum_sa_offset / sa_offset.size() << endl;
-	// Check if decoding works.
+	// Check if decoding of dup array with offsets works. 
 	start = 0;
 	for (uint64_t i = 1; i < darray.size(); ++i) {
 		end = h_select(i)+1-i;
@@ -462,6 +469,18 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 				}
 		}
 		start = end;
+	}
+	// Check if decoding of offsets work.
+	int pos = 0;
+	int num_run = 0;
+	while (pos < sa_offset.size()) {
+		vector<uint64_t> run = encoder.decode_run(num_run);
+		for (uint64_t o : run) {
+			if (sa_offset[pos++] != o) {
+				cout << "Error" << endl;
+			}
+		}
+		num_run++;
 	}
 	
     }
