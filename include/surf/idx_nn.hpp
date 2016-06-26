@@ -411,7 +411,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
         t_h_select h_select;
         load_from_cache(h_select, surf::KEY_H_SELECT, cc, true);
         h_select.set_vector(&hrrr);
-	jl_encoder encoder;
+	jl_encoder jlencoder;
 
 	// Iterate through all nodes.
 	uint64_t start = 0;
@@ -440,10 +440,11 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 					cout << "ERROR: sa_pos is out of bounds." << endl;
 			}
 			// Encode cur_offset.
-			encoder.add(cur_offsets);
+			jlencoder.add(cur_offsets);
 		}
 		start = end;
 	}
+	jlencoder.prepare_decode();
 	// Some stats.
 	uint64_t sum_sa_offset = 0.0;
 	for (const auto& val : sa_offset) sum_sa_offset += val;
@@ -474,7 +475,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 	int pos = 0;
 	int num_run = 0;
 	while (pos < sa_offset.size()) {
-		vector<uint64_t> run = encoder.decode_run(num_run);
+		int_vector<64> run = jlencoder.decode_run(num_run);
 		for (uint64_t o : run) {
 			if (sa_offset[pos++] != o) {
 				cout << "Error" << endl;
