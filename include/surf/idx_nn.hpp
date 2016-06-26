@@ -462,23 +462,29 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 			}
 			sort(actual.begin(), actual.end());
 			sort(expected.begin(), expected.end());
-			if (expected.size() != actual.size())
-				cout << "ERROR "<< endl;
+			if (expected.size() != actual.size()) {
+				cout << "ERROR sizes"<< endl;
+				break;
+			}
 			for (size_t j = 0; j < actual.size(); ++j) 
 				if (actual[j] != expected[j]) {
-					cout << "ERROR" << endl;
+					cout << "ERROR values" << endl;
+					break;
 				}
 		}
 		start = end;
 	}
 	// Check if decoding of offsets work.
-	int pos = 0;
-	int num_run = 0;
-	while (pos < sa_offset.size()) {
+	uint64_t pos = 0;
+	uint64_t num_run = 0;
+	bool cont = true;
+	while (pos < sa_offset.size() && cont) {
 		int_vector<64> run = jlencoder.decode_run(num_run);
 		for (uint64_t o : run) {
 			if (sa_offset[pos++] != o) {
-				cout << "Error" << endl;
+				cout << "Error offsets" << endl;
+				cont = false;
+				break;
 			}
 		}
 		num_run++;

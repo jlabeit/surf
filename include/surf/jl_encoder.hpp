@@ -16,11 +16,12 @@ class jl_encoder{
     // Number of runs already encoded.
     uint64_t m_cur_run; 
     // List that stores for all short runs their key. 
-    vector<KeyType> m_keys;
+    vector<KeyType> m_keys; // Before prepare_decode.
+    wt_huff<> m_keys_wt; // After prepare_decode.
     // For each key a list of all deltas of runs with the corresponding key.
-    map<KeyType, vector<uint64_t>> m_deltas;
-    map<KeyType, int_vector<>> m_compressed_deltas;
-    vector<int_vector<>> m_big_runs;
+    map<KeyType, vector<uint64_t>> m_deltas; // Before ....
+    map<KeyType, int_vector<>> m_compressed_deltas; // After ....
+    vector<int_vector<>> m_big_runs; // Before and after.
     // Get key of a run.
     KeyType get_key(const vector<uint64_t>& run) {
 	if (run.size() > 15)
@@ -29,7 +30,7 @@ class jl_encoder{
 	for (size_t i = 1; i < run.size(); ++i) {
 		max_delta = std::max(max_delta, run[i] - run[i-1]);
 	}
-	if (max_delta > 15)
+	if (max_delta > 14)
 		return BIG_RUN;
 	return make_tuple(max_delta, run.size());
     }
@@ -55,11 +56,21 @@ class jl_encoder{
     }
     // Count how many runs with a key have already been encoded before position pos.
     uint64_t rank(const KeyType& key, uint64_t pos) const {
-	uint64_t res = 0;
-	for (size_t i = 0; i < pos; ++i)
-		if (m_keys[i] == key)
-		  res++;	
+	uint64_t res = m_keys_wt.rank(pos, map_key_to_byte(key));
 	return res;
+    }
+
+    uint8_t map_key_to_byte(const KeyType key) const {
+	if (key == BIG_RUN) {
+		return 255;
+	} else 
+		return std::get<0>(key) + 16 * std::get<1>(key);
+    }
+
+    KeyType byte_to_key(const uint8_t b) const {
+	if (b == 255)
+		return BIG_RUN;
+	return make_tuple(b % 16, b / 16);
     }
 
   public:
@@ -73,6 +84,7 @@ class jl_encoder{
     }
 
     void prepare_decode() {
+	// Bitcompress small delta lists.
 	for(const auto& kv : m_deltas) {
 		int_vector<> c_deltas(kv.second.size(), 0);
 		for (size_t i = 0; i < kv.second.size(); ++i)
@@ -80,11 +92,26 @@ class jl_encoder{
 		util::bit_compress(c_deltas);
 		m_compressed_deltas[kv.first] = c_deltas;
 	}
+	// Delete unkompressed version.
 	m_deltas.clear();
+	// Build wavelet tree over keys.
+	{
+		uint64_t size = m_keys.size();
+		 std::string tmp_file = "tmp_file.sdsl";
+		int_vector<8> tmp_keys(size, 0);	
+		for (size_t i = 0; i < size; ++i)
+			tmp_keys[i] = map_key_to_byte(m_keys[i]);
+		sdsl::store_to_file(tmp_keys, tmp_file);
+
+		int_vector_buffer<8> tmp_buffer(tmp_file);
+		m_keys_wt = wt_huff<>(tmp_buffer, size);
+		sdsl::remove(tmp_file);
+		m_keys.clear();
+	}
     }
 
     int_vector<64> decode_run(uint64_t run_id) {
-	KeyType key = m_keys[run_id];
+	KeyType key = byte_to_key(m_keys_wt[run_id]);
 	int_vector<64> result;
 	if (key == BIG_RUN) {
 		const int_vector<>& tmp = m_big_runs[rank(key, run_id)];
