@@ -130,4 +130,17 @@ class jl_encoder{
 		result[i] += result[i-1];
 	return result;
     }
+
+    uint64_t get_size_in_bytes() const {
+	cout << "m_keys_wt: " << sdsl::size_in_bytes(m_keys_wt) << endl;
+	cout << "m_big_runs: " << sdsl::size_in_bytes(m_big_runs) << endl;
+	uint64_t m_compressed_deltas_size = 0;
+	for (const auto& kv : m_compressed_deltas) {
+		m_compressed_deltas_size += sdsl::size_in_bytes(kv.second);
+	}
+	cout << "m_compressed_deltas: " << m_compressed_deltas_size << endl;
+	return  sdsl::size_in_bytes(m_keys_wt) +
+		sdsl::size_in_bytes(m_big_runs) +
+		m_compressed_deltas_size;
+    }
 };

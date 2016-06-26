@@ -489,6 +489,7 @@ void construct(idx_nn<t_csa,t_k2treap,t_rmq,t_border,t_border_rank,t_border_sele
 		}
 		num_run++;
 	}
+	cout << jlencoder.get_size_in_bytes() * 8 / dup.size() << " bits per dup." << endl;
 	
     }
     cout<<"...RMQ_C"<<endl;
